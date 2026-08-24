@@ -1,61 +1,85 @@
-# Multi-Depot Drone Delivery Optimization with PuLP
+# Drone Delivery Optimization with PuLP
 
-This repository contains a mixed-integer linear programming (MILP) model for a multi-depot drone vehicle-routing problem implemented in Python with PuLP.
+This repository contains an intermediate-to-advanced optimization project for a **multi-depot capacitated drone routing problem with time windows (CVRPTW)**.
 
-The model is no longer a simple warehouse-to-customer assignment model. It now constructs explicit customer-to-customer routes by using directed arc variables, so each active drone starts at one selected warehouse, visits its assigned customers in sequence, and returns to the same warehouse.
+The project now includes both an exact Mixed-Integer Linear Programming model and a Hill Climbing baseline so that students can compare mathematical optimization against a local-search heuristic on the same data set.
 
-## Problem Scope
+## Main Features
 
-The optimization simultaneously decides:
+- Multiple warehouses
+- Multiple heterogeneous drones
+- Customer demand
+- Drone payload capacity
+- Maximum route duration
+- Customer service times
+- Customer time windows
+- Warehouse deployment cost
+- Drone-specific travel cost
+- Customer-to-customer routing
+- Flow conservation
+- Load-based subtour elimination
+- CBC solver through PuLP
+- Hill Climbing benchmark
+- CSV-based input data
+- Route visualization with Matplotlib
 
-- which drones are activated,
-- which warehouse each active drone uses as its depot,
-- which drone serves each customer,
-- the order in which customers are visited,
-- which directed flight arcs are used,
-- customer service start times,
-- cumulative payload along each route.
+## Project Structure
 
-## Objective
-
-The objective minimizes total system cost:
-
-1. variable drone operating cost proportional to travel time, and
-2. fixed warehouse deployment cost for each active drone.
-
-## Constraints
-
-The MILP includes:
-
-- exact customer coverage,
-- one selected warehouse per active drone,
-- one departure from and one return to the selected warehouse,
-- customer flow conservation,
-- payload-capacity limits,
-- route-duration limits,
-- customer time windows,
-- time propagation between consecutive visits,
-- return-to-depot timing,
-- load-based MTZ subtour elimination.
-
-The MTZ structure prevents disconnected customer cycles that do not connect to the selected warehouse.
-
-## Travel-Time Data
-
-All warehouses and customers have two-dimensional coordinates. A complete travel-time matrix is generated from ceiling-rounded Euclidean distance. This produces consistent travel times for warehouse-to-customer, customer-to-customer, and customer-to-warehouse arcs.
-
-The coordinates are illustrative educational data and can be replaced by real distances or travel times from another source.
-
-## Solver
-
-The model is solved with CBC through PuLP:
-
-```python
-solver = PULP_CBC_CMD(msg=False, timeLimit=60)
-model.solve(solver)
+```text
+.
+├── data/
+│   ├── customers.csv
+│   ├── drones.csv
+│   └── warehouses.csv
+├── drone_delivery/
+│   ├── __init__.py
+│   ├── data.py
+│   ├── hill_climbing.py
+│   ├── model.py
+│   ├── reporting.py
+│   └── visualization.py
+├── compare_methods.py
+├── drone_delivery_optimization.py
+├── main.py
+├── MODEL.md
+├── requirements.txt
+└── LICENSE
 ```
 
-The solver is therefore used to evaluate the complete MILP rather than only applying a heuristic construction procedure.
+## Optimization Model
+
+The MILP model determines:
+
+1. which drones are activated,
+2. which warehouse each active drone uses,
+3. which drone serves each customer,
+4. which directed arcs are used in every drone route,
+5. arrival time at each served customer,
+6. cumulative payload after visiting each customer.
+
+The objective minimizes total routing cost plus warehouse deployment cost.
+
+The model includes customer coverage, depot consistency, flow conservation, payload capacity, route-duration, time-window, return-deadline, and subtour-elimination constraints.
+
+A detailed mathematical formulation is available in [MODEL.md](MODEL.md).
+
+## CSV Input
+
+The optimization data are separated from the code.
+
+### `data/warehouses.csv`
+
+Contains warehouse coordinates and deployment costs.
+
+### `data/customers.csv`
+
+Contains customer coordinates, demand, service time, and time-window bounds.
+
+### `data/drones.csv`
+
+Contains drone payload capacity, maximum route duration, and travel cost coefficient.
+
+Euclidean distances are generated automatically from the coordinates in the CSV files.
 
 ## Installation
 
@@ -63,56 +87,68 @@ The solver is therefore used to evaluate the complete MILP rather than only appl
 pip install -r requirements.txt
 ```
 
-## Run
+## Run the MILP Solver
+
+```bash
+python main.py
+```
+
+The script solves the multi-depot drone routing model with CBC and prints the selected routes. It also generates:
+
+```text
+milp_routes.png
+```
+
+## Compare MILP and Hill Climbing
+
+```bash
+python compare_methods.py
+```
+
+This executes both methods on the same instance and reports:
+
+- MILP objective value,
+- Hill Climbing objective value,
+- route structure for both approaches,
+- Hill Climbing iteration count,
+- percentage heuristic gap relative to the MILP optimum.
+
+It also creates route plots for both methods.
+
+## Hill Climbing Baseline
+
+The Hill Climbing implementation first constructs a feasible solution using a greedy insertion procedure. It then improves that solution using two neighborhoods:
+
+1. **2-opt reversal** inside a drone route,
+2. **customer relocation** between drone routes, including alternative warehouse assignments for the receiving route.
+
+Only feasible moves are accepted. Capacity, customer time windows, and maximum drone route duration are checked before a candidate solution can replace the incumbent solution.
+
+This provides a useful comparison between an exact MILP method and a local-search method. The Hill Climbing result is not guaranteed to be globally optimal.
+
+## Backward-Compatible Entry Point
+
+The original file name is retained:
 
 ```bash
 python drone_delivery_optimization.py
 ```
 
-## Output
+It now calls the modular application in `main.py`.
 
-For an optimal solution, the script reports:
+## Educational Purpose
 
-- solver status,
-- objective value,
-- selected warehouse for every active drone,
-- ordered route,
-- customers served,
-- payload utilization,
-- travel and service time,
-- route-time utilization,
-- variable travel cost,
-- deployment cost,
-- customer arrival times and time windows,
-- total payload and total system cost.
+This project is intended to demonstrate:
 
-A post-solve validation function independently checks customer coverage, depot return, duplicate visits, payload capacity, and route-duration feasibility.
-
-## Model Structure
-
-The main binary variables are:
-
-- `deploy[w,d]`: drone `d` is deployed from warehouse `w`,
-- `active[d]`: drone `d` is used,
-- `assign[d,c]`: drone `d` serves customer `c`,
-- `arc[d,i,j]`: drone `d` directly travels from node `i` to node `j`.
-
-Continuous variables are used for customer arrival times and cumulative route load.
-
-See [MODEL.md](MODEL.md) for the mathematical formulation.
-
-## Modeling Improvements Over the Earlier Version
-
-The earlier formulation contained route variables that did not actually represent customer-to-customer movement, warehouse-dependent travel terms that were aggregated incorrectly, and ordering variables that were not connected to a valid routing structure.
-
-The current formulation replaces those disconnected decisions with explicit directed arc variables and route-flow equations. Warehouse selection, customer assignment, timing, payload, and subtour elimination are now linked to the same route structure.
-
-## Educational Use
-
-This repository is intended as an operations-research teaching example. The data set is small enough for students to inspect but the formulation contains the main components of a real multi-depot capacitated vehicle-routing model with time windows.
+- mathematical optimization modeling,
+- mixed-integer programming,
+- vehicle-routing logic,
+- subtour elimination,
+- time-window constraints,
+- heuristic local search,
+- solver benchmarking,
+- separation of model, data, reporting, and visualization layers.
 
 ## License
 
-This project is distributed under a custom non-commercial license. Commercial use, resale, paid integration, commercial redistribution, or use as part of a paid commercial product or service is prohibited without prior written permission from the copyright holder.
-
-See [LICENSE](LICENSE) for the complete terms.
+This project is distributed under a custom non-commercial license. Commercial use, resale, commercial integration, and commercial redistribution are prohibited without prior written permission from the copyright holder. See [LICENSE](LICENSE) for the complete terms.
